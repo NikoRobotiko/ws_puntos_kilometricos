@@ -1,0 +1,22 @@
+# ROS 2 y empaquetado Python
+build/
+install/
+log/
+dist/
+*.egg-info/
+
+# Cachés y entornos locales
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.coverage
+htmlcov/
+.venv/
+venv/
+
+# Configuración local y credenciales
+.agents/
+.aws/
+.codex/
+.env
+.env.*
