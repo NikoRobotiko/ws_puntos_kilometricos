@@ -38,12 +38,13 @@ y [NavSatFix](https://github.com/ros2/common_interfaces/blob/humble/sensor_msgs/
    decreciente. Con velocidad firmada, una inversión de marcha se integra con su
    signo sin volver a orientar.
 
-`encoder_signed:=false` es el valor inicial para el encoder disponible, que solo
-entrega magnitud en m/s. Se presupone que el vehículo mantiene el sentido
-aprendido; si cambia de sentido hay que volver a orientar antes de continuar.
-Una magnitud sin signo no permite detectar marcha atrás sin GPS. Si en el futuro
-el control de motores entrega velocidad longitudinal firmada, configurar
-`encoder_signed:=true` para integrar las inversiones automáticamente.
+`encoder_signed:=true` es el valor inicial para el encoder disponible, que
+entrega velocidad longitudinal con signo en m/s. La orientación inicial aprende
+la relación entre ese signo y el aumento o disminución del PK. Después, una
+inversión de marcha se integra automáticamente, incluso sin señal GPS.
+Para un encoder que solo entregue magnitud puede configurarse
+`encoder_signed:=false`; en ese caso se presupone que el vehículo mantiene el
+sentido aprendido y es necesario volver a orientar si cambia de sentido.
 
 La vía queda fijada tras identificarla. No se infieren cambios de línea ni rutas
 por desvíos. Para otra vía hay que reiniciar y orientar de nuevo; resolver desvíos
@@ -145,7 +146,7 @@ Parámetros principales, con valores iniciales orientativos:
 
 | Parámetro | Valor | Unidad / propósito |
 | --- | --- | --- |
-| `encoder_signed` | `false` | El encoder disponible entrega solo magnitud |
+| `encoder_signed` | `true` | El encoder disponible entrega velocidad con signo |
 | `encoder_sigma` | `0.1` | m/s, ruido mínimo de velocidad |
 | `encoder_drift_variance_per_meter` | `0.02` | m²/m, crecimiento espacial de varianza |
 | `process_variance_per_second` | `0.1` | m²/s, crecimiento temporal de varianza |

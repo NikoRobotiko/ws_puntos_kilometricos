@@ -41,7 +41,7 @@ class Coordenadas_a_PPKK(Node):
         self.settings = Settings(**{
             field.name: self.get_parameter(field.name).value for field in fields(defaults)})
         parameters = {
-            'encoder_signed': False,
+            'encoder_signed': True,
             'encoder_sigma': 0.1,
             'encoder_drift_variance_per_meter': 0.02,
             'process_variance_per_second': 0.1,

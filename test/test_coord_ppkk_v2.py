@@ -5,6 +5,7 @@ import json
 import math
 from types import SimpleNamespace
 
+import pytest
 from nav_msgs.msg import Odometry
 from sensor_msgs.msg import NavSatFix
 
@@ -41,7 +42,7 @@ class Adapter:
                               for pk in (0, 500, 1000)])
         self.motion = MotionBuffer()
         self.tracker = PKTracker(railway, self.motion, Settings(map_sigma=1))
-        self.config = {'encoder_signed': False, 'encoder_sigma': 0.1,
+        self.config = {'encoder_signed': True, 'encoder_sigma': 0.1,
                        'default_gps_sigma': 5, 'max_gps_sigma': 10, 'max_encoder_gap': 2}
         self.pending_gps = deque(maxlen=100)
         self.last_encoder_received = None
@@ -91,6 +92,26 @@ def test_real_messages_queue_future_fix_and_publish_meter_precision():
     status = json.loads(node.pub_estado.messages[-1].data)
     assert status['encoder_obsoleto']
     assert status['stamp_estimacion'] == 9
+
+
+@pytest.mark.parametrize('speed,direction', [
+    (10.0, 1), (10.0, -1), (-10.0, 1), (-10.0, -1),
+])
+def test_signed_encoder_orients_and_reverses_without_gps(speed, direction):
+    node = Adapter()
+    initial_pk = 200 if direction == 1 else 600
+    for time in range(10):
+        node.time = time
+        node.callback_odometria(node.odometry(time, speed))
+        node.callback_gps(node.fix(time, initial_pk + direction * 10 * time))
+    assert node.tracker.state == 'AVANCE'
+    assert node.tracker.filter.direction == direction * (1 if speed > 0 else -1)
+    for time, velocity in [(10, 0.0), (11, -speed), (12, -speed)]:
+        node.time = time
+        node.callback_odometria(node.odometry(time, velocity))
+    assert node.motion.latest.speed == -speed
+    assert node.pub_metros.messages[-1].data == pytest.approx(initial_pk + direction * 80)
+    assert node.tracker.last_correction_time == 9
 
 
 def test_invalid_fix_and_covariance_do_not_enter_queue():
