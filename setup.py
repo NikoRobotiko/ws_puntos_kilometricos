@@ -28,6 +28,7 @@ setup(
     entry_points={
         'console_scripts': [
             'coord_ppkk_v2 = puntos_kilometricos.coord_ppkk_v2:main',
+            'coord_ppkk_v3 = puntos_kilometricos.coord_ppkk_v3:main',
         ],
     },
 )

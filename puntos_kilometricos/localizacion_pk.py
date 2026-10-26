@@ -10,16 +10,16 @@ import re
 
 def pk_a_metros(texto):
     """Interpretar KM+MMM sin perder los ceros de los metros."""
-    match = re.fullmatch(r'(\d+)\+(\d{3})', str(texto).strip())
+    match = re.fullmatch(r'(\d+)\+(\d{3})', str(texto).strip()) #Comprueba si el contenido de la celda coincide con la nomenclatura PK.
     if match is None:
         raise ValueError(f'PK inválido: {texto!r}')
     return int(match[1]) * 1000 + int(match[2])
 
 
-def formatear_pk(metros):
+def metros_a_pk(metros):
     """Redondear a metros completos y expresar el PK como KM+MMM."""
-    if not math.isfinite(metros):
-        raise ValueError('El PK debe ser finito')
+    if not math.isfinite(metros) or metros < 0:   #Por si acaso.
+        raise ValueError('PK no admitido')
     signo = '-' if metros < 0 else ''
     km, resto = divmod(int(math.floor(abs(metros) + 0.5)), 1000)
     return f'{signo}{km}+{resto:03d}'
@@ -45,9 +45,8 @@ class Hito:
 
 
 @dataclass(frozen=True)
-class Projection:
+class Proyeccion:
     """Observación longitudinal obtenida al proyectar sobre un tramo."""
-
     track: str
     index: int
     pk: float
@@ -56,9 +55,9 @@ class Projection:
 
 
 class RailwayMap:
-    """Aproximación por cuerdas entre hitos; no reconstruye las curvas reales."""
+    """Trazado por vía uniendo hitos consecutivos en orden creciente de PK."""
 
-    def __init__(self, hitos, max_segment_gap=1500.0):
+    def __init__(self, hitos):
         groups = defaultdict(list)
         for hito in hitos:
             groups[hito.track].append(hito)
@@ -69,7 +68,7 @@ class RailwayMap:
             for index, (a, b) in enumerate(zip(points, points[1:])):
                 length = calcular_distancia(a.lat, a.lon, b.lat, b.lon)
                 delta = b.pk - a.pk
-                if 0 < delta <= max_segment_gap and length >= 1:
+                if delta > 0 and length >= 1:
                     self.segments.append((track, index, a, b, length))
                 else:
                     self.discarded_segments += 1
@@ -77,7 +76,7 @@ class RailwayMap:
             raise ValueError('El CSV no contiene tramos utilizables')
 
     @classmethod
-    def from_csv(cls, path, max_segment_gap=1500.0):
+    def from_csv(cls, path):
         """Validar filas y omitir PK duplicados con coordenadas conflictivas."""
         grouped = defaultdict(list)
         discarded = 0
@@ -106,7 +105,7 @@ class RailwayMap:
             else:
                 hitos.append(first)
                 discarded += len(group) - 1
-        return cls(hitos, max_segment_gap), discarded
+        return cls(hitos), discarded
 
     def candidates(self, lat, lon, track=None):
         """Proyectar GPS sobre cada cuerda sin extrapolar fuera del tramo."""
@@ -123,7 +122,7 @@ class RailwayMap:
             if not 0 <= raw_t <= 1:
                 continue
             distance = math.hypot(gx - raw_t * bx, gy - raw_t * by)
-            results.append(Projection(
+            results.append(Proyeccion(
                 name, index, a.pk + raw_t * (b.pk - a.pk), distance,
                 (b.pk - a.pk) / length))
         return sorted(results, key=lambda p: p.distance)

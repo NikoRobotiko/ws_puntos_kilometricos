@@ -45,7 +45,7 @@ class Coordenadas_a_PPKK(Node):
         self.bd_pks=pd.read_csv(ruta_csv, sep=";", decimal=",")
 
         #Convertir PK en formato texto a decimal
-        self.bd_pks['PK_num']=self.bd_pks['PK'].apply(pk_a_decimal)
+        self.bd_pks['PK_num']=self.bd_pks['PK'].apply(self.pk_a_decimal)
 
         num_invalidos=self.bd_pks['PK_num'].isna().sum()
 

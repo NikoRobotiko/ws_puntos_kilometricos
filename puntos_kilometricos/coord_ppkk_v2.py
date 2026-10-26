@@ -15,7 +15,7 @@ from sensor_msgs.msg import NavSatFix
 from std_msgs.msg import Float64, String
 
 from puntos_kilometricos.localizacion_pk import (
-    MotionBuffer, PKTracker, RailwayMap, Settings, formatear_pk,
+    MotionBuffer, PKTracker, RailwayMap, Settings, metros_a_pk,
 )
 
 
@@ -27,13 +27,16 @@ def stamp_seconds(msg):
 class Coordenadas_a_PPKK(Node):
     """Publicar PK con resolución de un metro y su incertidumbre estimada."""
 
+    #default_csv_filename = 'Coordenadas_PPKK_AV.csv'
+    default_csv_filename = 'Coordenadas_PPKK_Simples.csv'
+
     def __init__(self):
         super().__init__('coord_ppkk_node')
         try:
             csv_dir = get_package_share_directory('puntos_kilometricos')
         except PackageNotFoundError:
             csv_dir = os.path.join(os.path.dirname(__file__), '..', 'config')
-        default_csv = os.path.join(csv_dir, 'Coordenadas_PPKK_AV.csv')
+        default_csv = os.path.join(csv_dir, self.default_csv_filename)
         self.declare_parameter('ruta_csv', default_csv)
         defaults = Settings()
         for field in fields(defaults):
@@ -46,11 +49,10 @@ class Coordenadas_a_PPKK(Node):
             'encoder_drift_variance_per_meter': 0.02,
             'process_variance_per_second': 0.1,
             'history_seconds': 30.0,
-            'max_encoder_gap': 2.0,
+            'max_encoder_gap': 20.0,
             'max_speed': 100.0,
             'default_gps_sigma': 5.0,
             'max_gps_sigma': 10.0,
-            'max_segment_pk_gap': 1500.0,
         }
         for name, value in parameters.items():
             self.declare_parameter(name, value)
@@ -62,23 +64,22 @@ class Coordenadas_a_PPKK(Node):
             value = getattr(self.settings, field.name)
             if field.name != 'initial_track' and (not math.isfinite(value) or value <= 0):
                 raise ValueError(f'{field.name} debe ser positivo y finito')
-        railway_map, discarded = RailwayMap.from_csv(
-            self.get_parameter('ruta_csv').value, self.config['max_segment_pk_gap'])
+        mapa_red_av, discarded = RailwayMap.from_csv(
+            self.get_parameter('ruta_csv').value)
         if self.settings.initial_track and not any(
-                s[0] == self.settings.initial_track for s in railway_map.segments):
+                s[0] == self.settings.initial_track for s in mapa_red_av.segments):
             raise ValueError('initial_track no corresponde a una vía con tramos válidos')
         if discarded:
             self.get_logger().warning(f'CSV: {discarded} filas descartadas')
         self.get_logger().info(
-            f'Mapa: {len(railway_map.segments)} tramos utilizables; '
-            f'{railway_map.discarded_segments} tramos sin geometría utilizable '
-            'o demasiado largos omitidos')
+            f'Mapa: {len(mapa_red_av.segments)} tramos utilizables; '
+            f'{mapa_red_av.discarded_segments} tramos sin geometría utilizable omitidos')
         self.motion = MotionBuffer(
             history=self.config['history_seconds'], max_gap=self.config['max_encoder_gap'],
             process_noise=self.config['process_variance_per_second'],
             drift_per_meter=self.config['encoder_drift_variance_per_meter'],
             max_speed=self.config['max_speed'])
-        self.tracker = PKTracker(railway_map, self.motion, self.settings)
+        self.tracker = PKTracker(mapa_red_av, self.motion, self.settings)
         self.pending_gps = deque(maxlen=100)
         self.last_encoder_received = None
         self.pub_pk = self.create_publisher(String, '/punto_kilometrico', 10)
@@ -94,11 +95,14 @@ class Coordenadas_a_PPKK(Node):
 
     def validar_gps(self, msg):
         """Obtener sigma horizontal conservadora desde la covarianza ENU."""
-        if (msg.status.status < 0 or not math.isfinite(msg.latitude)
+        if (msg.status.status < 0 
+                or not math.isfinite(msg.latitude)
                 or not math.isfinite(msg.longitude)
                 or not -90 <= msg.latitude <= 90 or not -180 <= msg.longitude <= 180):
             return False, None
+        
         sigma = self.config['default_gps_sigma']
+
         if msg.position_covariance_type != NavSatFix.COVARIANCE_TYPE_UNKNOWN:
             e, n = msg.position_covariance[0], msg.position_covariance[4]
             en = (msg.position_covariance[1] + msg.position_covariance[3]) / 2
@@ -152,7 +156,7 @@ class Coordenadas_a_PPKK(Node):
         if estimate is None:
             return
         pk, sigma = estimate
-        self.pub_pk.publish(String(data=f'{self.tracker.track} | PK: {formatear_pk(pk)}'))
+        self.pub_pk.publish(String(data=f'{self.tracker.track} | PK: {metros_a_pk(pk)}'))
         self.pub_metros.publish(Float64(data=pk))
         self.pub_sigma.publish(Float64(data=sigma))
 

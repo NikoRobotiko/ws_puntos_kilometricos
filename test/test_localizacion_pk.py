@@ -74,6 +74,32 @@ def test_extreme_geographic_pk_ratios_preserve_segment_and_interpolation(length)
     assert candidate.scale == pytest.approx(500 / length)
 
 
+def test_csv_connects_each_track_by_ascending_pk_without_maximum_gap(tmp_path):
+    path = tmp_path / 'map.csv'
+    # Filas desordenadas; el último punto de A está más cerca del primero.
+    path.write_text('nombre_via;PK;latitud;longitud\n'
+                    'A;20+000;0;0.01\n'
+                    'B;10+000;1;0.01\n'
+                    'A;0+000;0;0\n'
+                    'A;5+000;0;0.1\n'
+                    'B;0+000;1;0\n', encoding='utf-8')
+
+    railway, discarded = RailwayMap.from_csv(path)
+
+    assert discarded == 0
+    assert railway.discarded_segments == 0
+    assert [(track, index, a.pk, b.pk)
+            for track, index, a, b, _ in railway.segments] == [
+                ('A', 0, 0, 5000),
+                ('A', 1, 5000, 20000),
+                ('B', 0, 0, 10000),
+            ]
+    candidates = railway.candidates(0, 0.055, track='A')
+    assert len(candidates) == 2
+    assert next(p.pk for p in candidates if p.index == 1) == pytest.approx(12500)
+    assert railway.candidates(1, 0.005, track='B')[0].pk == pytest.approx(5000)
+
+
 def test_csv_validation_and_conflicting_duplicates(tmp_path):
     path = tmp_path / 'map.csv'
     path.write_text('nombre_via;PK;latitud;longitud\n'
